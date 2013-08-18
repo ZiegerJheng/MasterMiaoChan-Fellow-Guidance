@@ -63,15 +63,35 @@ class Fellow
     public function editShareEventDate($shareEventID, $newAttendingDate)
     {
         $editShareEvent = new ShareEvent($shareEventID);
+
+        $oldAttendingTS = strtotime($editShareEvent->attending_date);
+        $newAttendingTS = strtotime($newAttendingDate);
+        if($newAttendingTS > $oldAttendingTS){
+            $editShareEvent->postpone_count += 1;
+        }
+
         $editShareEvent->attending_date = $newAttendingDate;
         $editShareEvent->save();
     }
 
-    public function editShareEventStatus($shareEventID, $newStatus)
+    public function editShareEventStatus($shareEventID, $newStatus, $newComingInfo = null)
     {
         $editShareEvent = new ShareEvent($shareEventID);
         $editShareEvent->status = $newStatus;
         $editShareEvent->save();
+
+        if('確認參加要入門' == $newStatus && null !== $newComingInfo){
+            $addNewComing = new NewComing(array(
+                'new_fellow' => $editShareEvent->new_friend,
+                'inviter' => $this->id,
+                'relationship' => $editShareEvent->relationship,
+                'attending_date' => $newComingInfo['attendingDate'],
+                'attending_place' => $newComingInfo['attendingPlace'],
+                'note' => $newComingInfo['note'],
+                'last_report_date' => date('Y-m-d')
+            ));
+            $addNewComing->save();
+        }
     }
 
     public function editShareEventNote($shareEventID, $newNote)
@@ -81,9 +101,16 @@ class Fellow
         $editShareEvent->save();
     }
 
-    public function editNewComingDate()
+    public function editNewComingDate($newComingID, $newAttendingDate)
     {
         $editNewComing = new NewComing($newComingID);
+
+        $oldAttendingTS = strtotime($editNewComing->attending_date);
+        $newAttendingTS = strtotime($newAttendingDate);
+        if($newAttendingTS > $oldAttendingTS){
+            $editNewComing->postpone_count += 1;
+        }
+
         $editNewComing->attending_date = $newAttendingDate;
         $editNewComing->save();
     }
@@ -122,7 +149,7 @@ class Fellow
             }
         }
 
-        $rDailyShareList = $this->fillZeroRecordToReport($rDailyShareList, $sDate, $eDate);
+        $rDailyShareList = fillZeroRecordToReport($rDailyShareList, $sDate, $eDate);
 
         return $rDailyShareList;
     }
@@ -131,7 +158,8 @@ class Fellow
     {
         $shareEventList = new ShareEventList(array(
             'inviter' => $this->id,
-            'attending_date' => array('BETWEEN', ($sDate . '<=>' . $eDate))
+            'attending_date' => array('BETWEEN', ($sDate . '<=>' . $eDate)),
+            'status' => array('LIKE', '確認參加%')
         ));
 
         $rShareEventList = array();
@@ -147,16 +175,17 @@ class Fellow
             }
         }
 
-        $rShareEventList = $this->fillZeroRecordToReport($rShareEventList, $sDate, $eDate);
+        $rShareEventList = fillZeroRecordToReport($rShareEventList, $sDate, $eDate);
 
         return $rShareEventList;
     }
 
-    public function getNewComingList()
+    public function getNewComingList($sDate, $eDate)
     {
         $newComingList = new NewComingList(array(
             'inviter' => $this->id,
-            'attending_date' => array('BETWEEN', ($sDate . '<=>' . $eDate))
+            'attending_date' => array('BETWEEN', ($sDate . '<=>' . $eDate)),
+            'status' => '確認入門'
         ));
 
         $newComingListArray = $newComingList->toArray();
@@ -170,7 +199,7 @@ class Fellow
                 $rNewComingList[$attendingDate] = 1;
             }
 
-            $rNewComingList = $this->fillZeroRecordToReport($rNewComingList, $sDate, $eDate);
+            $rNewComingList = fillZeroRecordToReport($rNewComingList, $sDate, $eDate);
 
             return $rNewComingList;
         }
@@ -182,29 +211,9 @@ class Fellow
 
         $report['DailyShare'] = $this->getDailyShareList($sDate, $eDate);
         $report['ShareEvent'] = $this->getShareEventList($sDate, $eDate);
-        $report['NewComing'] = $this->getNewComingList();
+        $report['NewComing'] = $this->getNewComingList($sDate, $eDate);
 
         return $report;
-    }
-
-    private function fillZeroRecordToReport($inArray, $sDate, $eDate)
-    {
-        $sTimeStamp = strtotime($sDate);
-        $eTimeStamp = strtotime($eDate);
-
-        $outArray = array();
-        for($cTimeStamp = $sTimeStamp; $cTimeStamp <= $eTimeStamp; $cTimeStamp += (60 * 60 * 24)){
-            $keyDate = date('Y-m-d', $cTimeStamp);
-
-            if(true == array_key_exists($keyDate, $inArray)){
-                $outArray[$keyDate] = $inArray[$keyDate];
-            }
-            else{
-                $outArray[$keyDate] = 0;
-            }
-        }
-
-        return $outArray;
     }
 }
 ?>
